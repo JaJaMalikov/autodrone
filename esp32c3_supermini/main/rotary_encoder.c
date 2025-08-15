@@ -1,50 +1,49 @@
+#include <stdbool.h>
 #include "rotary_encoder.h"
+
+static void rotary_isr_handler(void *arg)
+{
+    rotary_encoder_t *enc = (rotary_encoder_t *)arg;
+    int a = gpio_get_level(enc->pin_a);
+    int b = gpio_get_level(enc->pin_b);
+    if (a == b) {
+        enc->count++;
+    } else {
+        enc->count--;
+    }
+}
 
 esp_err_t rotary_encoder_init(rotary_encoder_t *enc, gpio_num_t pin_a, gpio_num_t pin_b)
 {
-    pcnt_unit_config_t unit_config = {
-        .low_limit = -1000,
-        .high_limit = 1000,
+    enc->pin_a = pin_a;
+    enc->pin_b = pin_b;
+    enc->count = 0;
+
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << pin_a) | (1ULL << pin_b),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_ANYEDGE,
     };
-    ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, &enc->unit));
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
 
-    pcnt_chan_config_t chan_a_config = {
-        .edge_gpio_num = pin_a,
-        .level_gpio_num = pin_b,
-    };
-    pcnt_channel_handle_t chan_a;
-    ESP_ERROR_CHECK(pcnt_new_channel(enc->unit, &chan_a_config, &chan_a));
-
-    pcnt_chan_config_t chan_b_config = {
-        .edge_gpio_num = pin_b,
-        .level_gpio_num = pin_a,
-    };
-    pcnt_channel_handle_t chan_b;
-    ESP_ERROR_CHECK(pcnt_new_channel(enc->unit, &chan_b_config, &chan_b));
-
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(chan_a, PCNT_CHANNEL_EDGE_ACTION_DECREASE,
-                                                 PCNT_CHANNEL_EDGE_ACTION_INCREASE));
-    ESP_ERROR_CHECK(pcnt_channel_set_level_action(chan_a, PCNT_CHANNEL_LEVEL_ACTION_KEEP,
-                                                  PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
-    ESP_ERROR_CHECK(pcnt_channel_set_edge_action(chan_b, PCNT_CHANNEL_EDGE_ACTION_INCREASE,
-                                                 PCNT_CHANNEL_EDGE_ACTION_DECREASE));
-    ESP_ERROR_CHECK(pcnt_channel_set_level_action(chan_b, PCNT_CHANNEL_LEVEL_ACTION_KEEP,
-                                                  PCNT_CHANNEL_LEVEL_ACTION_INVERSE));
-
-    ESP_ERROR_CHECK(pcnt_unit_enable(enc->unit));
-    ESP_ERROR_CHECK(pcnt_unit_clear_count(enc->unit));
-    ESP_ERROR_CHECK(pcnt_unit_start(enc->unit));
+    static bool isr_service_installed = false;
+    if (!isr_service_installed) {
+        ESP_ERROR_CHECK(gpio_install_isr_service(0));
+        isr_service_installed = true;
+    }
+    ESP_ERROR_CHECK(gpio_isr_handler_add(pin_a, rotary_isr_handler, enc));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(pin_b, rotary_isr_handler, enc));
     return ESP_OK;
 }
 
 int rotary_encoder_get_count(rotary_encoder_t *enc)
 {
-    int val = 0;
-    pcnt_unit_get_count(enc->unit, &val);
-    return val;
+    return enc->count;
 }
 
 void rotary_encoder_reset(rotary_encoder_t *enc)
 {
-    pcnt_unit_clear_count(enc->unit);
+    enc->count = 0;
 }
