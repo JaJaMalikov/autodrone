@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "driver/spi_master.h"
+#include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_gc9a01.h"
@@ -54,7 +55,7 @@ static void init_display(esp_lcd_panel_handle_t *panel, int cs)
         .trans_queue_depth = 10,
     };
     esp_lcd_panel_io_handle_t io_handle;
-    ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((spi_bus_handle_t)SPI2_HOST, &io_config, &io_handle));
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &io_config, &io_handle));
 
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = PIN_NUM_RST,
@@ -64,7 +65,7 @@ static void init_display(esp_lcd_panel_handle_t *panel, int cs)
     ESP_ERROR_CHECK(esp_lcd_new_panel_gc9a01(io_handle, &panel_config, panel));
     ESP_ERROR_CHECK(esp_lcd_panel_reset(*panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(*panel));
-    ESP_ERROR_CHECK(esp_lcd_panel_disp_off(*panel, false));
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(*panel, true));
 }
 
 static void fill_color(esp_lcd_panel_handle_t panel, uint16_t color)
